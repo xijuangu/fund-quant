@@ -28,6 +28,14 @@ def generate_quality_footer(level: str, reasons: list[str]) -> str:
     return "\n".join(lines)
 
 
+def _has_missing_data_issue(diag: dict) -> bool:
+    return (
+        diag.get("forward_fill_count", 0) > 0
+        or diag.get("still_missing", 0) > 0
+        or diag.get("original_missing", 0) > 0
+    )
+
+
 def generate_experiment_report(
     experiment_name: str,
     target_weights: dict[str, float],
@@ -136,9 +144,14 @@ def generate_experiment_report(
         lines.append("- 注意：本次回测存在净值口径混用，结果置信度较低。")
 
     # Missing data
-    if missing_data_diag:
+    missing_issues = {
+        code: diag
+        for code, diag in missing_data_diag.items()
+        if _has_missing_data_issue(diag)
+    }
+    if missing_issues:
         lines.extend(["", "## 缺失数据诊断", ""])
-        for code, diag in missing_data_diag.items():
+        for code, diag in missing_issues.items():
             lines.append(f"- **{code}**：前向填充 {diag.get('forward_fill_count', 0)} 次，仍缺失 {diag.get('still_missing', 0)} 天")
 
     # Contributions
@@ -205,8 +218,8 @@ def generate_experiment_report(
             "",
             "## 后续观察",
             "",
-            "- 后续实验可继续观察不同再平衡频率对回撤控制的影响。",
-            "- 可进一步增加压力区间诊断以验证防守资产在不同市场环境下的表现。",
+            "- 对比不同再平衡频率在收益、回撤和换手成本上的差异。",
+            "- 结合压力区间诊断，观察防守资产在极端行情中的缓冲效果是否稳定。",
         ]
     )
 

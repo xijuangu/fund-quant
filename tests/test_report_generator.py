@@ -125,6 +125,112 @@ class ReportLanguageGuardTest(unittest.TestCase):
         self.assertIn("-12.00%", report)
         self.assertIn("-18.00%", report)
 
+    def test_report_omits_missing_data_section_when_no_issue(self):
+        metrics = {
+            "cumulative_return": 0.35,
+            "annualized_return": 0.12,
+            "annualized_volatility": 0.15,
+            "max_drawdown": -0.25,
+            "sharpe_ratio": 0.8,
+            "calmar_ratio": 0.48,
+            "best_month_return": 0.08,
+            "worst_month_return": -0.07,
+            "positive_month_pct": 0.62,
+            "total_trading_days": 500,
+            "years": 2.0,
+        }
+        report = generate_experiment_report(
+            experiment_name="测试实验",
+            target_weights={"000001": 0.75, "000002": 0.25},
+            rebalance_rule="monthly",
+            start_date="2022-01-01",
+            end_date="2024-12-31",
+            metrics=metrics,
+            nav_policy={"preferred": "adjusted_nav", "actual_used": {}, "mixed_policy": False},
+            data_quality_level="A",
+            data_quality_reasons=[],
+            missing_data_diag={
+                "000001": {"forward_fill_count": 0, "still_missing": 0, "original_missing": 0},
+                "000002": {"forward_fill_count": 0, "still_missing": 0, "original_missing": 0},
+            },
+            contributions_summary={},
+            turnover_total=0.0,
+            cost_total=0.0,
+        )
+
+        self.assertNotIn("缺失数据诊断", report)
+
+    def test_report_keeps_missing_data_section_when_issue_exists(self):
+        metrics = {
+            "cumulative_return": 0.35,
+            "annualized_return": 0.12,
+            "annualized_volatility": 0.15,
+            "max_drawdown": -0.25,
+            "sharpe_ratio": 0.8,
+            "calmar_ratio": 0.48,
+            "best_month_return": 0.08,
+            "worst_month_return": -0.07,
+            "positive_month_pct": 0.62,
+            "total_trading_days": 500,
+            "years": 2.0,
+        }
+        report = generate_experiment_report(
+            experiment_name="测试实验",
+            target_weights={"000001": 0.75, "000002": 0.25},
+            rebalance_rule="monthly",
+            start_date="2022-01-01",
+            end_date="2024-12-31",
+            metrics=metrics,
+            nav_policy={"preferred": "adjusted_nav", "actual_used": {}, "mixed_policy": False},
+            data_quality_level="B",
+            data_quality_reasons=["存在短缺口前向填充"],
+            missing_data_diag={
+                "000001": {"forward_fill_count": 2, "still_missing": 0, "original_missing": 2},
+                "000002": {"forward_fill_count": 0, "still_missing": 0, "original_missing": 0},
+            },
+            contributions_summary={},
+            turnover_total=0.0,
+            cost_total=0.0,
+        )
+
+        self.assertIn("缺失数据诊断", report)
+        missing_section = report.split("## 缺失数据诊断", 1)[1].split("## 数据质量", 1)[0]
+        self.assertIn("000001", missing_section)
+        self.assertNotIn("000002", missing_section)
+
+    def test_report_observation_notes_are_current(self):
+        metrics = {
+            "cumulative_return": 0.35,
+            "annualized_return": 0.12,
+            "annualized_volatility": 0.15,
+            "max_drawdown": -0.25,
+            "sharpe_ratio": 0.8,
+            "calmar_ratio": 0.48,
+            "best_month_return": 0.08,
+            "worst_month_return": -0.07,
+            "positive_month_pct": 0.62,
+            "total_trading_days": 500,
+            "years": 2.0,
+        }
+        report = generate_experiment_report(
+            experiment_name="测试实验",
+            target_weights={"000001": 0.75, "000002": 0.25},
+            rebalance_rule="monthly",
+            start_date="2022-01-01",
+            end_date="2024-12-31",
+            metrics=metrics,
+            nav_policy={"preferred": "adjusted_nav", "actual_used": {}, "mixed_policy": False},
+            data_quality_level="A",
+            data_quality_reasons=[],
+            missing_data_diag={},
+            contributions_summary={},
+            turnover_total=0.0,
+            cost_total=0.0,
+        )
+
+        self.assertIn("结合压力区间诊断", report)
+        self.assertNotIn("可进一步增加压力区间诊断", report)
+
     def test_sanitize_removes_forbidden_terms(self):
         dirty = "建议买入该基金，卖出其他。推荐持有。保证收益稳定。"
         clean = sanitize_report(dirty)
