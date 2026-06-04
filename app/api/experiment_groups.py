@@ -80,22 +80,46 @@ def update_experiment_group(group_id: str, body: ExperimentGroupUpdate, db: Sess
 
 @router.delete("/{group_id}")
 def delete_experiment_group(group_id: str, db: Session = Depends(get_db)):
-    g = db.query(ExperimentGroup).filter(ExperimentGroup.experiment_group_id == uuid.UUID(group_id)).first()
+    gid = uuid.UUID(group_id)
+    g = db.query(ExperimentGroup).filter(ExperimentGroup.experiment_group_id == gid).first()
     if not g:
         raise HTTPException(status_code=404, detail="Experiment group not found")
 
-    # Cascade-delete all experiments in this group (and their backtests/positions)
-    exps = db.query(PortfolioExperiment).filter(
-        PortfolioExperiment.experiment_group_id == g.experiment_group_id
-    ).all()
-    for e in exps:
-        backtests = db.query(BacktestResult).filter(BacktestResult.experiment_id == e.experiment_id).all()
-        for bt in backtests:
-            db.query(BacktestNavDaily).filter(BacktestNavDaily.result_id == bt.result_id).delete()
-            db.delete(bt)
-        db.query(PortfolioPosition).filter(PortfolioPosition.experiment_id == e.experiment_id).delete()
-        db.delete(e)
+    # Use bulk delete for all children, then delete the group.
+    # Must use Query.delete() consistently (not db.delete()) so that all
+    # SQL runs in a predictable order before the parent DELETE.
+    exp_ids = (
+        db.query(PortfolioExperiment.experiment_id)
+        .filter(PortfolioExperiment.experiment_group_id == gid)
+        .all()
+    )
+    exp_id_list = [eid for (eid,) in exp_ids]
 
+    if exp_id_list:
+        backtests = (
+            db.query(BacktestResult.result_id)
+            .filter(BacktestResult.experiment_id.in_(exp_id_list))
+            .all()
+        )
+        bt_id_list = [rid for (rid,) in backtests]
+
+        if bt_id_list:
+            db.query(BacktestNavDaily).filter(
+                BacktestNavDaily.result_id.in_(bt_id_list)
+            ).delete(synchronize_session="fetch")
+            db.query(BacktestResult).filter(
+                BacktestResult.result_id.in_(bt_id_list)
+            ).delete(synchronize_session="fetch")
+
+        db.query(PortfolioPosition).filter(
+            PortfolioPosition.experiment_id.in_(exp_id_list)
+        ).delete(synchronize_session="fetch")
+
+        db.query(PortfolioExperiment).filter(
+            PortfolioExperiment.experiment_id.in_(exp_id_list)
+        ).delete(synchronize_session="fetch")
+
+    db.flush()
     db.delete(g)
     db.commit()
     return {"experiment_group_id": group_id, "status": "deleted"}
