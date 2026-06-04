@@ -43,6 +43,7 @@ def generate_experiment_report(
     turnover_total: float,
     cost_total: float,
     benchmark_comparison: dict | None = None,
+    stress_period_results: list[dict] | None = None,
 ) -> str:
     """Generate a Markdown research report for a portfolio experiment.
 
@@ -169,6 +170,31 @@ def generate_experiment_report(
             exp_val = metrics.get(key, 0)
             bench_val = benchmark_comparison.get(key, 0)
             lines.append(f"| {label} | {exp_val:.2%} | {bench_val:.2%} |")
+
+    # Stress period diagnostics
+    if stress_period_results:
+        lines.extend(
+            [
+                "",
+                "## 压力区间诊断",
+                "",
+                "| 压力区间 | 覆盖区间 | 交易日数 | 区间收益 | 区间最大回撤 |",
+                "|----------|----------|----------|----------|--------------|",
+            ]
+        )
+        for item in stress_period_results:
+            lines.append(
+                "| {name} | {start} 至 {end} | {days} | {period_return:.2%} | {max_drawdown:.2%} |".format(
+                    name=item.get("period_name", "N/A"),
+                    start=item.get("overlap_start", "N/A"),
+                    end=item.get("overlap_end", "N/A"),
+                    days=item.get("trading_days", 0),
+                    period_return=item.get("period_return", 0.0),
+                    max_drawdown=item.get("max_drawdown", 0.0),
+                )
+            )
+        lines.append("")
+        lines.append("压力区间结果基于组合日度净值在指定日期范围内的表现计算。")
 
     # Quality footer
     lines.append(generate_quality_footer(data_quality_level, data_quality_reasons))

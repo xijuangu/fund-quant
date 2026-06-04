@@ -80,6 +80,51 @@ class ReportLanguageGuardTest(unittest.TestCase):
         self.assertIn("数据质量", report)
         self.assertIn("**A**", report)
 
+    def test_report_includes_stress_period_diagnostics(self):
+        metrics = {
+            "cumulative_return": 0.35,
+            "annualized_return": 0.12,
+            "annualized_volatility": 0.15,
+            "max_drawdown": -0.25,
+            "sharpe_ratio": 0.8,
+            "calmar_ratio": 0.48,
+            "best_month_return": 0.08,
+            "worst_month_return": -0.07,
+            "positive_month_pct": 0.62,
+            "total_trading_days": 500,
+            "years": 2.0,
+        }
+        report = generate_experiment_report(
+            experiment_name="测试实验",
+            target_weights={"000001": 0.75, "000002": 0.25},
+            rebalance_rule="monthly",
+            start_date="2017-12-01",
+            end_date="2020-01-01",
+            metrics=metrics,
+            nav_policy={"preferred": "adjusted_nav", "actual_used": {}, "mixed_policy": False},
+            data_quality_level="A",
+            data_quality_reasons=[],
+            missing_data_diag={},
+            contributions_summary={},
+            turnover_total=0.0,
+            cost_total=0.0,
+            stress_period_results=[
+                {
+                    "period_name": "2018年a股熊市",
+                    "overlap_start": "2018-01-02",
+                    "overlap_end": "2019-02-01",
+                    "trading_days": 260,
+                    "period_return": -0.12,
+                    "max_drawdown": -0.18,
+                }
+            ],
+        )
+
+        self.assertIn("压力区间诊断", report)
+        self.assertIn("2018年a股熊市", report)
+        self.assertIn("-12.00%", report)
+        self.assertIn("-18.00%", report)
+
     def test_sanitize_removes_forbidden_terms(self):
         dirty = "建议买入该基金，卖出其他。推荐持有。保证收益稳定。"
         clean = sanitize_report(dirty)

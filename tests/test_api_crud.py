@@ -504,6 +504,11 @@ class TestBacktestResults:
         gid = self._create_group()
         self._create_fund("F001", "基金A")
         eid = self._create_exp(gid, "E1", weights={"F001": 1.0}, rebalance="no_rebalance")
+        client.post("/stress-periods", json={
+            "period_name": "测试压力区间",
+            "start_date": "2024-01-03",
+            "end_date": "2024-01-05",
+        })
 
         self._seed_nav("F001", [
             {"fund_code": "F001", "nav_date": "2024-01-02", "unit_nav": 1.0, "accumulated_nav": 2.0, "adjusted_nav": 2.0, "source": "test"},
@@ -527,6 +532,12 @@ class TestBacktestResults:
         r = client.get(f"/backtests/results/by-experiment/{eid}")
         assert r.status_code == 200
         assert r.json()["result_id"] == result_id
+
+        r = client.get(f"/backtests/results/{result_id}/report")
+        assert r.status_code == 200
+        report = r.json()["report"]
+        assert "压力区间诊断" in report
+        assert "测试压力区间" in report
 
     def test_run_backtest_experiment_not_found(self):
         r = client.post(f"/backtests/run/{uuid.uuid4()}", json={})

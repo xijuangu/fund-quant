@@ -7,11 +7,14 @@ from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.models.backtest import BacktestNavDaily, BacktestResult
 from app.models.experiment import PortfolioExperiment, PortfolioPosition
+from app.models.stress_period import StressPeriod
 from app.services.backtest_engine import backtest_portfolio
 from app.services.nav_loader import load_nav_dataframe
 from app.services.report_generator import generate_experiment_report
 
 router = APIRouter(prefix="/backtests", tags=["backtests"])
+
+STRESS_REPORT_SECTION = "## 压力区间诊断"
 
 
 def get_db() -> Session:
@@ -20,6 +23,61 @@ def get_db() -> Session:
         yield db
     finally:
         db.close()
+
+
+def _compute_stress_period_results(db: Session, result_id: uuid_mod.UUID) -> list[dict]:
+    """Compute portfolio performance for active stress periods that overlap a backtest."""
+    daily = (
+        db.query(BacktestNavDaily)
+        .filter(BacktestNavDaily.result_id == result_id)
+        .order_by(BacktestNavDaily.nav_date)
+        .all()
+    )
+    if len(daily) < 2:
+        return []
+
+    first_date = daily[0].nav_date
+    last_date = daily[-1].nav_date
+    periods = (
+        db.query(StressPeriod)
+        .filter(StressPeriod.is_active.is_(True))
+        .filter(StressPeriod.end_date >= first_date)
+        .filter(StressPeriod.start_date <= last_date)
+        .order_by(StressPeriod.start_date)
+        .all()
+    )
+
+    results: list[dict] = []
+    for period in periods:
+        rows = [
+            row for row in daily
+            if period.start_date <= row.nav_date <= period.end_date
+        ]
+        if len(rows) < 2:
+            continue
+
+        start_nav = rows[0].portfolio_nav
+        end_nav = rows[-1].portfolio_nav
+        peak = start_nav
+        max_drawdown = 0.0
+        for row in rows:
+            peak = max(peak, row.portfolio_nav)
+            drawdown = row.portfolio_nav / peak - 1 if peak > 0 else 0.0
+            max_drawdown = min(max_drawdown, drawdown)
+
+        results.append(
+            {
+                "period_id": str(period.period_id),
+                "period_name": period.period_name,
+                "overlap_start": rows[0].nav_date.isoformat(),
+                "overlap_end": rows[-1].nav_date.isoformat(),
+                "trading_days": len(rows),
+                "period_return": end_nav / start_nav - 1 if start_nav > 0 else 0.0,
+                "max_drawdown": max_drawdown,
+            }
+        )
+
+    return results
 
 
 @router.get("/health")
@@ -179,7 +237,7 @@ def get_backtest_report(result_id: str, db: Session = Depends(get_db)):
     if not bt:
         raise HTTPException(status_code=404, detail="Backtest result not found")
 
-    if bt.report_markdown:
+    if bt.report_markdown and STRESS_REPORT_SECTION in bt.report_markdown:
         return {"report": bt.report_markdown}
 
     # Generate report if not yet saved
@@ -229,6 +287,7 @@ def get_backtest_report(result_id: str, db: Session = Depends(get_db)):
     # Compute turnover from rebalance records
     turnover_total = sum(r.get("turnover", 0.0) for r in rebalance_records) if isinstance(rebalance_records, list) else 0.0
     cost_total = sum(r.get("estimated_cost", 0.0) for r in rebalance_records) if isinstance(rebalance_records, list) else 0.0
+    stress_period_results = _compute_stress_period_results(db, bt.result_id)
 
     report = generate_experiment_report(
         experiment_name=exp.experiment_name if exp else "Unknown",
@@ -244,6 +303,7 @@ def get_backtest_report(result_id: str, db: Session = Depends(get_db)):
         contributions_summary=contrib_summary,
         turnover_total=turnover_total,
         cost_total=cost_total,
+        stress_period_results=stress_period_results,
     )
 
     bt.report_markdown = report
