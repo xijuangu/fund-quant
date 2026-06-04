@@ -26,9 +26,9 @@
 - 实现 `app/importers/csv_importer.py`：解析基金代码、日期、单位净值、累计净值、复权净值、来源。
 - 实现 `app/services/nav_loader.py`：从数据库加载净值数据为 DataFrame。
 - 添加 `scripts/import_fund_trace.py`，支持从 `/Users/xijuangu/Developer/Personal/fund-trace/fund-trace.db` 复用导入已有 SQLite 数据。
-- 已从 fund-trace 当前基金池导入 `fund_basic` 21 只基金、`fund_nav_daily` 484 条净值。
+- 已从 fund-trace 当前基金池导入 `fund_basic` 21 只基金、`fund_nav_daily` 26288 条净值。
 - 默认跳过 `nav_snapshots` 中已不在当前 `funds` 表里的 180 条 orphan 净值；脚本保留 `--include-orphans` 选项以便后续需要时导入。
-- fund-trace 导入数据覆盖范围主要为 2026-04-21 到 2026-06-02。
+- fund-trace 已完成批量历史回填，导入数据覆盖范围为 2013-08-22 到 2026-06-03。
 - fund-trace 来源没有复权净值，导入后 `adjusted_nav` 为空。
 - 10 个 CSV 导入测试全部通过。
 
@@ -71,7 +71,6 @@
 
 - 依赖已安装，虚拟环境可用。
 - Docker PostgreSQL 已运行，数据库迁移已执行。
-- fund-trace 导入数据只有最近约 1 个月左右，不足以支撑严肃长期回测。
 - fund-trace 导入数据缺少复权净值，后续回测应统一使用累计净值或单位净值口径，并在报告中体现低于完整复权数据的置信度。
 - fund-trace 当前基金池缺少债券类基金，无法直接组成 75/15/10 目标组合。
 - 前端依赖已安装，构建通过，但尚未启动 dev server 验证。
@@ -79,7 +78,6 @@
 
 ## 下一步
 
-- 补充更长周期的历史净值数据。
 - 补齐债券基金，用于构建 75/15/10 目标组合。
 - 创建第一个 75/15/10 实验组并运行回测。
 - 人工校验回测结果与 Excel 手工计算结果。
