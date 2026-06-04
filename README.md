@@ -10,6 +10,15 @@
 
 目标是维护个人基金池、导入历史净值、创建组合实验组、运行回测、诊断防守资产效果，并生成 Markdown 研究报告。
 
+## 与 fund-trace 的关系
+
+本项目与 [xijuangu/fund-trace](https://github.com/xijuangu/fund-trace) 是上下游关系：
+
+- `fund-trace`：负责基金跟踪、单只基金添加、历史净值抓取和本地 SQLite 数据沉淀。
+- `fund-quant`：负责把 `fund-trace` 的基金与净值导入 PostgreSQL，并在此基础上做组合实验、回测、压力区间诊断和研究报告。
+
+第一版不在 `fund-quant` 中直接抓取基金历史净值。新增基金和历史数据时，建议先在 `fund-trace` 中执行 `add` / `history` / `backfill`，再通过 `scripts/import_fund_trace.py` 导入本项目。这样可以保持数据采集职责集中在 `fund-trace`，组合研究职责集中在 `fund-quant`。
+
 ## 当前状态
 
 当前已完成：

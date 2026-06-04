@@ -26,6 +26,7 @@
 - 实现 `app/importers/csv_importer.py`：解析基金代码、日期、单位净值、累计净值、复权净值、来源。
 - 实现 `app/services/nav_loader.py`：从数据库加载净值数据为 DataFrame。
 - 添加 `scripts/import_fund_trace.py`，支持从 `/Users/xijuangu/Developer/Personal/fund-trace/fund-trace.db` 复用导入已有 SQLite 数据。
+- 文档已明确本项目与 [xijuangu/fund-trace](https://github.com/xijuangu/fund-trace) 的上下游关系：`fund-trace` 负责基金清单与历史净值采集，`fund-quant` 负责组合研究、回测和报告。
 - 已从 fund-trace 当前基金池导入 `fund_basic` 24 只基金、`fund_nav_daily` 35459 条净值。
 - 已补充 3 只债券基金：`110037` 易方达纯债债券A、`110038` 易方达纯债债券C、`003547` 鹏华丰禄债券。
 - 默认跳过 `nav_snapshots` 中已不在当前 `funds` 表里的 180 条 orphan 净值；脚本保留 `--include-orphans` 选项以便后续需要时导入。

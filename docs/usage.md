@@ -4,6 +4,34 @@
 
 本文记录第一版本地研究工具的常用操作。当前项目定位为本地自用的基金组合研究工具，只做历史数据导入、组合回测、风险分析和研究报告，不做交易执行。
 
+## 0. 与 fund-trace 的关系
+
+本项目依赖 [xijuangu/fund-trace](https://github.com/xijuangu/fund-trace) 提供第一版历史净值来源，两者职责分工如下：
+
+```text
+fund-trace：
+  - 维护被跟踪的基金清单
+  - 添加单只基金
+  - 抓取并回填历史净值
+  - 将原始数据保存在 fund-trace.db
+
+fund-quant：
+  - 从 fund-trace.db 导入基金基础信息和历史净值
+  - 维护资产桶、实验组、组合实验和压力区间
+  - 运行组合回测、计算指标、生成研究报告
+  - 提供本地 Web UI 做组合研究
+```
+
+因此，第一版的数据流是：
+
+```text
+fund-trace 抓取/回填历史净值
+  -> scripts/import_fund_trace.py 导入 fund-quant
+  -> fund-quant 创建实验、运行回测、生成报告
+```
+
+注意：`fund-quant` 的基金池页面“添加基金”只创建研究侧基金基础信息，不会自动抓取历史净值。需要可回测历史数据时，应先在 `fund-trace` 中添加基金并回填历史净值，再重新导入 `fund-quant`。
+
 ## 1. 准备环境
 
 在项目根目录执行：
