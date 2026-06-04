@@ -2,7 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
-from app.models.fund import FundBasic
+from app.models.backtest import BacktestNavDaily, BacktestResult
+from app.models.experiment import PortfolioExperiment, PortfolioPosition
+from app.models.fund import FundBasic, FundNavDaily
 from app.schemas import FundCreate, FundUpdate
 
 router = APIRouter(prefix="/funds", tags=["funds"])
@@ -115,6 +117,20 @@ def delete_fund(fund_code: str, db: Session = Depends(get_db)):
     f = db.query(FundBasic).filter(FundBasic.fund_code == fund_code).first()
     if not f:
         raise HTTPException(status_code=404, detail="Fund not found")
+
+    # Cascade: find experiments referencing this fund, delete backtests → positions → experiment
+    positions = db.query(PortfolioPosition).filter(PortfolioPosition.fund_code == fund_code).all()
+    for pos in positions:
+        exp = db.query(PortfolioExperiment).filter(PortfolioExperiment.experiment_id == pos.experiment_id).first()
+        if exp:
+            backtests = db.query(BacktestResult).filter(BacktestResult.experiment_id == exp.experiment_id).all()
+            for bt in backtests:
+                db.query(BacktestNavDaily).filter(BacktestNavDaily.result_id == bt.result_id).delete()
+                db.delete(bt)
+            db.query(PortfolioPosition).filter(PortfolioPosition.experiment_id == exp.experiment_id).delete()
+            db.delete(exp)
+
+    db.query(FundNavDaily).filter(FundNavDaily.fund_code == fund_code).delete()
     db.delete(f)
     db.commit()
     return {"fund_code": fund_code, "status": "deleted"}

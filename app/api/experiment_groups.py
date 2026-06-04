@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
-from app.models.experiment import ExperimentGroup
+from app.models.backtest import BacktestNavDaily, BacktestResult
+from app.models.experiment import ExperimentGroup, PortfolioExperiment, PortfolioPosition
 from app.schemas import ExperimentGroupCreate, ExperimentGroupUpdate
 
 router = APIRouter(prefix="/experiment-groups", tags=["experiment-groups"])
@@ -82,6 +83,19 @@ def delete_experiment_group(group_id: str, db: Session = Depends(get_db)):
     g = db.query(ExperimentGroup).filter(ExperimentGroup.experiment_group_id == uuid.UUID(group_id)).first()
     if not g:
         raise HTTPException(status_code=404, detail="Experiment group not found")
+
+    # Cascade-delete all experiments in this group (and their backtests/positions)
+    exps = db.query(PortfolioExperiment).filter(
+        PortfolioExperiment.experiment_group_id == g.experiment_group_id
+    ).all()
+    for e in exps:
+        backtests = db.query(BacktestResult).filter(BacktestResult.experiment_id == e.experiment_id).all()
+        for bt in backtests:
+            db.query(BacktestNavDaily).filter(BacktestNavDaily.result_id == bt.result_id).delete()
+            db.delete(bt)
+        db.query(PortfolioPosition).filter(PortfolioPosition.experiment_id == e.experiment_id).delete()
+        db.delete(e)
+
     db.delete(g)
     db.commit()
     return {"experiment_group_id": group_id, "status": "deleted"}
