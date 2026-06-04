@@ -67,7 +67,8 @@ postgresql+psycopg://fund_lab:fund_lab@localhost:5432/fund_lab
 先在 fund-trace 项目中完成基金添加和历史净值回填，再回到本项目导入：
 
 ```bash
-.venv/bin/python scripts/import_fund_trace.py /Users/xijuangu/Developer/Personal/fund-trace/fund-trace.db
+export FUND_TRACE_DB=/path/to/fund-trace/fund-trace.db
+.venv/bin/python scripts/import_fund_trace.py "$FUND_TRACE_DB"
 ```
 
 导入规则：
@@ -95,7 +96,7 @@ postgresql+psycopg://fund_lab:fund_lab@localhost:5432/fund_lab
 ### 3.1 在 fund-trace 添加单只基金
 
 ```bash
-cd /Users/xijuangu/Developer/Personal/fund-trace
+cd /path/to/fund-trace
 ./fund-trace add 110037
 ```
 
@@ -124,8 +125,9 @@ cd /Users/xijuangu/Developer/Personal/fund-trace
 回到 fund-quant 项目：
 
 ```bash
-cd /Users/xijuangu/Developer/Personal/fund-quant
-.venv/bin/python scripts/import_fund_trace.py /Users/xijuangu/Developer/Personal/fund-trace/fund-trace.db
+cd /path/to/fund-quant
+export FUND_TRACE_DB=/path/to/fund-trace/fund-trace.db
+.venv/bin/python scripts/import_fund_trace.py "$FUND_TRACE_DB"
 ```
 
 导入脚本使用 `merge` 语义，可以重复执行：

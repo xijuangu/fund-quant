@@ -56,7 +56,8 @@ docker compose up -d postgres
 从 fund-trace 导入数据：
 
 ```bash
-.venv/bin/python scripts/import_fund_trace.py /Users/xijuangu/Developer/Personal/fund-trace/fund-trace.db
+export FUND_TRACE_DB=/path/to/fund-trace/fund-trace.db
+.venv/bin/python scripts/import_fund_trace.py "$FUND_TRACE_DB"
 ```
 
 运行默认 `75/15/10` smoke 回测：
