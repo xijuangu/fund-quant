@@ -9,6 +9,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import api from '../api/client';
 import type { BacktestResult } from '../api/types';
+import { KpiCard, PageHeader, StatGrid, Toolbar } from '../components/workspace';
 
 const { Text } = Typography;
 
@@ -36,18 +37,24 @@ export default function BacktestDashboardPage() {
     setLoading(true);
     try {
       const groups = await api.get<{ experiment_group_id: string; group_name: string }[]>('/experiment-groups');
-      const allResults: EnrichedBacktestResult[] = [];
-      for (const g of groups) {
+      const groupResults = await Promise.all(groups.map(async (g) => {
         try {
           const exps = await api.get<{ experiment_id: string; experiment_name: string; role: string }[]>(`/experiments?group_id=${g.experiment_group_id}`);
-          for (const exp of exps) {
+          const backtests = await Promise.all(exps.map(async (exp): Promise<EnrichedBacktestResult | null> => {
             try {
               const bt = await api.get<BacktestResult>(`/backtests/results/by-experiment/${exp.experiment_id}`);
-              if (bt.result_id) { allResults.push({ ...bt, _experiment_name: exp.experiment_name, _role: exp.role, _group_name: g.group_name }); }
+              if (bt.result_id) {
+                return { ...bt, _experiment_name: exp.experiment_name, _role: exp.role, _group_name: g.group_name };
+              }
             } catch { /* no result */ }
-          }
-        } catch { /* skip */ }
-      }
+            return null;
+          }));
+          return backtests.filter((bt): bt is EnrichedBacktestResult => bt !== null);
+        } catch {
+          return [];
+        }
+      }));
+      const allResults = groupResults.flat();
       setResults(allResults);
     } catch { message.error('获取回测结果失败'); } finally { setLoading(false); }
   };
@@ -79,7 +86,7 @@ export default function BacktestDashboardPage() {
     return list.sort((a, b) => (a._experiment_name || '').localeCompare(b._experiment_name || ''));
   }, [results, groupFilter, roleFilter]);
 
-  const bestByReturn = useMemo(() => [...results].sort((a, b) => b.metrics.sharpe_ratio - a.metrics.sharpe_ratio)[0], [results]);
+  const bestBySharpe = useMemo(() => [...results].sort((a, b) => b.metrics.sharpe_ratio - a.metrics.sharpe_ratio)[0], [results]);
 
   const columns: ColumnsType<EnrichedBacktestResult> = [
     { title: '实验', key: 'experiment', width: 200, sorter: (a, b) => (a._experiment_name || '').localeCompare(b._experiment_name || ''), render: (_, r) => (<Space direction="vertical" size={0}><Text strong>{r._experiment_name}</Text><Text type="secondary" style={{ fontSize: 12 }}>{r._group_name}</Text></Space>) },
@@ -96,22 +103,30 @@ export default function BacktestDashboardPage() {
 
   return (
     <>
-      <div className="page-header"><h2>回测看板</h2><Space><Tooltip title="刷新"><Button icon={<ReloadOutlined />} onClick={fetchResults} /></Tooltip></Space></div>
+      <PageHeader
+        title="回测看板"
+        description="汇总实验组中的最新回测结果，用收益、回撤、波动和数据质量做横向比较。"
+        actions={<Tooltip title="刷新"><Button icon={<ReloadOutlined />} onClick={fetchResults} /></Tooltip>}
+      />
 
-      {bestByReturn && (<div className="stats-grid">
-        <div className="stat-card"><div className="stat-label">实验数量</div><div className="stat-value" style={{ color: '#1677ff' }}>{results.length}</div><div className="stat-sub">个回测结果</div></div>
-        <div className="stat-card"><div className="stat-label">最优夏普</div><div className="stat-value" style={{ color: '#52c41a' }}>{fmtNum(bestByReturn.metrics.sharpe_ratio)}</div><div className="stat-sub">{bestByReturn._experiment_name}</div></div>
-        <div className="stat-card"><div className="stat-label">质量 A 级</div><div className="stat-value" style={{ color: '#52c41a' }}>{results.filter((r) => r.data_quality_level === 'A').length}</div><div className="stat-sub">/ {results.length} 个结果</div></div>
-        <div className="stat-card"><div className="stat-label">质量 D 级</div><div className="stat-value" style={{ color: '#ff4d4f' }}>{results.filter((r) => r.data_quality_level === 'D').length}</div><div className="stat-sub">数据质量过低</div></div>
-      </div>)}
+      {bestBySharpe && (
+        <StatGrid>
+          <KpiCard label="实验数量" value={results.length} sub="个回测结果" tone="blue" />
+          <KpiCard label="最优夏普" value={fmtNum(bestBySharpe.metrics.sharpe_ratio)} sub={bestBySharpe._experiment_name} tone="green" />
+          <KpiCard label="质量 A 级" value={results.filter((r) => r.data_quality_level === 'A').length} sub={`/ ${results.length} 个结果`} tone="green" />
+          <KpiCard label="质量 D 级" value={results.filter((r) => r.data_quality_level === 'D').length} sub="数据质量过低" tone="red" />
+        </StatGrid>
+      )}
 
-      <div className="table-toolbar">
-        <Space wrap>
+      <Toolbar
+        filters={
+          <>
           <Select placeholder="实验组筛选" value={groupFilter} onChange={setGroupFilter} allowClear style={{ width: 200 }} options={groupNames.map((gn) => ({ label: gn, value: gn }))} />
           <Select placeholder="角色筛选" value={roleFilter} onChange={setRoleFilter} allowClear style={{ width: 130 }} options={roleValues.map((rv) => ({ label: ROLE_LABELS[rv] || rv, value: rv }))} />
-        </Space>
-        <Text type="secondary" style={{ fontSize: 13 }}>共 {filtered.length} / {results.length} 个结果</Text>
-      </div>
+          </>
+        }
+        summary={`共 ${filtered.length} / ${results.length} 个结果`}
+      />
 
       <Table columns={columns} dataSource={filtered} rowKey="result_id" loading={loading} size="middle" pagination={false} locale={{ emptyText: '暂无回测结果，请在实验组中运行回测' }} />
 

@@ -5,6 +5,7 @@ import { PlusOutlined, ExperimentOutlined, ReloadOutlined, EditOutlined, DeleteO
 import type { ColumnsType } from 'antd/es/table';
 import api from '../api/client';
 import type { ExperimentGroup } from '../api/types';
+import { KpiCard, PageHeader, StatGrid } from '../components/workspace';
 
 const { Text } = Typography;
 
@@ -69,13 +70,22 @@ export default function ExperimentGroupsPage() {
 
   return (
     <>
-      <div className="page-header">
-        <h2>实验组</h2>
-        <Space>
+      <PageHeader
+        title="实验组"
+        description="把主实验、基准和变体放在同一研究问题下，便于比较配置、再平衡和防守资产效果。"
+        actions={
+          <>
           <Tooltip title="刷新"><Button icon={<ReloadOutlined />} onClick={fetchGroups} /></Tooltip>
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>创建实验组</Button>
-        </Space>
-      </div>
+          </>
+        }
+      />
+
+      <StatGrid>
+        <KpiCard label="实验组数量" value={groups.length} sub="个研究主题" tone="blue" />
+        <KpiCard label="已写研究问题" value={groups.filter((g) => g.research_question).length} sub="便于报告生成" tone="green" />
+        <KpiCard label="有备注" value={groups.filter((g) => g.note).length} sub="保留实验上下文" tone="neutral" />
+      </StatGrid>
 
       <Table columns={columns} dataSource={groups} rowKey="experiment_group_id" loading={loading} size="middle" pagination={false} locale={{ emptyText: '暂无实验组，点击"创建实验组"开始' }} />
 

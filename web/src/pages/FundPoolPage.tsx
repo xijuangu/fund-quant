@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Table, Button, Modal, Form, Input, Select, Tag, Space, message,
-  Typography, Tooltip, Badge, Switch, Popconfirm, Input as SearchInput,
+  Typography, Tooltip, Switch, Popconfirm, Input as SearchInput,
 } from 'antd';
 import {
   PlusOutlined, SearchOutlined, ReloadOutlined,
@@ -11,6 +11,7 @@ import type { ColumnsType } from 'antd/es/table';
 import api from '../api/client';
 import type { FundBasic } from '../api/types';
 import { BUCKET_KEYS, BUCKET_LABELS, BUCKET_COLORS, BUCKET_ORDER } from '../api/types';
+import { KpiCard, PageHeader, StatGrid, Toolbar } from '../components/workspace';
 
 const { Text } = Typography;
 
@@ -93,6 +94,14 @@ export default function FundPoolPage() {
     return list.sort((a, b) => (BUCKET_ORDER[a.asset_bucket] ?? 99) - (BUCKET_ORDER[b.asset_bucket] ?? 99) || a.fund_code.localeCompare(b.fund_code));
   }, [funds, searchText, bucketFilter, statusFilter]);
 
+  const bucketCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const fund of funds) {
+      counts[fund.asset_bucket || 'unknown'] = (counts[fund.asset_bucket || 'unknown'] || 0) + 1;
+    }
+    return counts;
+  }, [funds]);
+
   const hasFilters = searchText || bucketFilter || statusFilter !== null;
 
   const columns: ColumnsType<FundBasic> = [
@@ -108,23 +117,35 @@ export default function FundPoolPage() {
 
   return (
     <>
-      <div className="page-header">
-        <h2>基金池</h2>
-        <Space>
+      <PageHeader
+        title="基金池"
+        description="维护本地研究基金池，资产桶用于组合约束、回测对比和报告拆解。"
+        actions={
+          <>
           <Tooltip title="刷新"><Button icon={<ReloadOutlined />} onClick={fetchFunds} /></Tooltip>
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>添加基金</Button>
-        </Space>
-      </div>
+          </>
+        }
+      />
 
-      <div className="table-toolbar">
-        <Space wrap>
+      <StatGrid>
+        <KpiCard label="基金总数" value={funds.length} sub={`${funds.filter((f) => f.is_active).length} 只启用`} tone="blue" />
+        <KpiCard label="权益 / QDII" value={(bucketCounts.a_share_equity || 0) + (bucketCounts.overseas_qdii || 0)} sub="进取仓位核心资产" tone="green" />
+        <KpiCard label="债券基金" value={bucketCounts.bond || 0} sub="防守资产" tone="neutral" />
+        <KpiCard label="黄金 / 商品" value={bucketCounts.gold_commodity || 0} sub="低相关资产" tone="gold" />
+      </StatGrid>
+
+      <Toolbar
+        filters={
+          <>
           <SearchInput placeholder="搜索代码 / 名称 / 公司" prefix={<SearchOutlined />} value={searchText} onChange={(e) => setSearchText(e.target.value)} style={{ width: 260 }} allowClear />
           <Select placeholder="资产桶筛选" value={bucketFilter} onChange={setBucketFilter} allowClear style={{ width: 170 }} options={BUCKET_KEYS.map((key) => ({ label: BUCKET_LABELS[key], value: key }))} />
           <Select placeholder="状态筛选" value={statusFilter} onChange={setStatusFilter} allowClear style={{ width: 120 }} options={[{ label: '启用', value: true }, { label: '停用', value: false }]} />
           {hasFilters && <Button icon={<ClearOutlined />} onClick={clearFilters} size="small">清除</Button>}
-        </Space>
-        <Text type="secondary" style={{ fontSize: 13 }}>共 {filtered.length} 只基金</Text>
-      </div>
+          </>
+        }
+        summary={`共 ${filtered.length} / ${funds.length} 只基金`}
+      />
 
       <Table columns={columns} dataSource={filtered} rowKey="fund_code" loading={loading} size="middle" pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (t) => `共 ${t} 只` }} locale={{ emptyText: '暂无基金，点击"添加基金"开始' }} />
 

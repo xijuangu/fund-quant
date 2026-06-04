@@ -14,6 +14,7 @@ import type { ColumnsType } from 'antd/es/table';
 import api from '../api/client';
 import type { PortfolioExperiment, FundBasic, BacktestResult } from '../api/types';
 import { BUCKET_LABELS } from '../api/types';
+import { KpiCard, PageHeader, StatGrid } from '../components/workspace';
 
 const { Text } = Typography;
 
@@ -58,15 +59,14 @@ export default function ExperimentDetailPage() {
     setLoading(true);
     try {
       const data = await api.get<PortfolioExperiment[]>(`/experiments?group_id=${groupId}`);
-      const enriched: ExpWithStatus[] = [];
-      for (const exp of data) {
+      const enriched = await Promise.all(data.map(async (exp): Promise<ExpWithStatus> => {
         try {
           const bt = await api.get<BacktestResult>(`/backtests/results/by-experiment/${exp.experiment_id}`);
-          enriched.push({ ...exp, _hasResult: true, _resultId: bt.result_id, _qualityLevel: bt.data_quality_level });
+          return { ...exp, _hasResult: true, _resultId: bt.result_id, _qualityLevel: bt.data_quality_level };
         } catch {
-          enriched.push({ ...exp, _hasResult: false });
+          return { ...exp, _hasResult: false };
         }
-      }
+      }));
       setExperiments(enriched);
     } catch {
       message.error('获取实验列表失败');
@@ -138,7 +138,11 @@ export default function ExperimentDetailPage() {
         message.success('实验已创建');
       }
       setModalOpen(false); form.resetFields(); setEditingExp(null); fetchExperiments();
-    } catch { /* handled */ }
+    } catch (error) {
+      if (error instanceof Error) {
+        message.error(error.message);
+      }
+    }
   };
 
   const handleDelete = async (experimentId: string) => {
@@ -151,7 +155,9 @@ export default function ExperimentDetailPage() {
       const result = await api.post(`/backtests/run/${experimentId}`, {});
       message.success(`回测完成 · 数据质量: ${(result as { data_quality_level: string }).data_quality_level}`);
       fetchExperiments();
-    } catch { message.error('回测失败'); } finally { setRunningId(null); }
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '回测失败');
+    } finally { setRunningId(null); }
   };
 
   const handleViewDetail = async (experimentId: string) => {
@@ -167,6 +173,8 @@ export default function ExperimentDetailPage() {
   };
 
   const fundNameMap = useMemo(() => { const m: Record<string, string> = {}; for (const f of funds) m[f.fund_code] = f.fund_name; return m; }, [funds]);
+  const testedCount = experiments.filter((exp) => exp._hasResult).length;
+  const mainCount = experiments.filter((exp) => exp.role === 'main').length;
 
   const columns: ColumnsType<ExpWithStatus> = [
     { title: '实验名称', dataIndex: 'experiment_name', key: 'experiment_name', sorter: (a, b) => a.experiment_name.localeCompare(b.experiment_name), render: (v: string, r) => (<Space><Text strong>{v}</Text>{r._hasResult ? (<Tooltip title={`已回测 · 质量: ${r._qualityLevel}`}><Tag color={QUALITY_COLORS[r._qualityLevel || 'B']} style={{ margin: 0 }}><CheckCircleOutlined /> {r._qualityLevel}</Tag></Tooltip>) : (<Tooltip title="尚未回测"><Tag style={{ margin: 0 }}><ClockCircleOutlined /> 未回测</Tag></Tooltip>)}</Space>) },
@@ -178,13 +186,24 @@ export default function ExperimentDetailPage() {
 
   return (
     <>
-      <div className="page-header">
-        <Space>
+      <PageHeader
+        title={groupName || '加载中...'}
+        description="管理同一研究问题下的主实验、基准和变体；运行回测后可查看组合配置和研究报告。"
+        meta={<Tag color="blue">实验组</Tag>}
+        actions={
+          <>
           <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/experiments')} />
-          <div><h2 style={{ margin: 0 }}>{groupName || '加载中...'}</h2><Text type="secondary" style={{ fontSize: 13 }}>实验组</Text></div>
-        </Space>
-        <Space><Tooltip title="刷新"><Button icon={<ReloadOutlined />} onClick={fetchExperiments} /></Tooltip><Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>创建实验</Button></Space>
-      </div>
+          <Tooltip title="刷新"><Button icon={<ReloadOutlined />} onClick={fetchExperiments} /></Tooltip>
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>创建实验</Button>
+          </>
+        }
+      />
+
+      <StatGrid>
+        <KpiCard label="实验数量" value={experiments.length} sub="主实验 / 基准 / 变体" tone="blue" />
+        <KpiCard label="已回测" value={testedCount} sub={`覆盖率 ${experiments.length ? Math.round(testedCount / experiments.length * 100) : 0}%`} tone="green" />
+        <KpiCard label="主实验" value={mainCount} sub="作为报告主体" tone="gold" />
+      </StatGrid>
 
       <Table columns={columns} dataSource={experiments} rowKey="experiment_id" loading={loading} size="middle" pagination={false} locale={{ emptyText: '暂无实验，点击"创建实验"开始' }} style={{ marginBottom: 24 }} />
 

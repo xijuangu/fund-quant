@@ -7,6 +7,7 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import api from '../api/client';
 import type { StressPeriod } from '../api/types';
+import { KpiCard, PageHeader, StatGrid } from '../components/workspace';
 
 const { Text } = Typography;
 
@@ -70,6 +71,12 @@ export default function StressPeriodsPage() {
     try { await api.del(`/stress-periods/${periodId}`); message.success('已删除'); fetchPeriods(); } catch { message.error('删除失败'); }
   };
 
+  const activeCount = periods.filter((p) => p.is_active).length;
+  const longestPeriod = periods.reduce((max, period) => {
+    const days = dayjs(period.end_date).diff(dayjs(period.start_date), 'day') + 1;
+    return days > max ? days : max;
+  }, 0);
+
   const columns: ColumnsType<StressPeriod> = [
     { title: '名称', dataIndex: 'period_name', key: 'period_name', sorter: (a, b) => a.period_name.localeCompare(b.period_name), render: (v: string) => <Text strong>{v}</Text> },
     { title: '日期范围', key: 'date_range', width: 220, sorter: (a, b) => a.start_date.localeCompare(b.start_date), render: (_, r) => (<Space size={4}><Text code>{r.start_date}</Text><Text type="secondary">～</Text><Text code>{r.end_date}</Text></Space>) },
@@ -81,7 +88,22 @@ export default function StressPeriodsPage() {
 
   return (
     <>
-      <div className="page-header"><h2>压力区间</h2><Space><Tooltip title="刷新"><Button icon={<ReloadOutlined />} onClick={fetchPeriods} /></Tooltip><Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>添加压力区间</Button></Space></div>
+      <PageHeader
+        title="压力区间"
+        description="维护可复用的市场压力阶段，用于观察债券、黄金和权益资产在极端环境下的贡献。"
+        actions={
+          <>
+            <Tooltip title="刷新"><Button icon={<ReloadOutlined />} onClick={fetchPeriods} /></Tooltip>
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>添加压力区间</Button>
+          </>
+        }
+      />
+
+      <StatGrid>
+        <KpiCard label="区间数量" value={periods.length} sub="个压力样本" tone="blue" />
+        <KpiCard label="启用区间" value={activeCount} sub="参与报告诊断" tone="green" />
+        <KpiCard label="最长区间" value={`${longestPeriod} 天`} sub="样本跨度" tone="gold" />
+      </StatGrid>
 
       <Table columns={columns} dataSource={periods} rowKey="period_id" loading={loading} size="middle" pagination={false} locale={{ emptyText: '暂无压力区间' }} />
 
