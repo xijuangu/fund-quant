@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: fund_lab_postgres
+    environment:
+      POSTGRES_USER: fund_lab
+      POSTGRES_PASSWORD: fund_lab
+      POSTGRES_DB: fund_lab
+    ports:
+      - "5432:5432"
+    volumes:
+      - fund_lab_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fund_lab -d fund_lab"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  fund_lab_postgres_data:
+

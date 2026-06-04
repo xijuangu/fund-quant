@@ -1,0 +1,2 @@
+"""Backtest result model boundary."""
+

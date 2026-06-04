@@ -1,0 +1,2 @@
+"""Fund model boundary."""
+
