@@ -1,12 +1,10 @@
 import unittest
-from datetime import date
 
 import pandas as pd
 
 from app.services.nav_alignment import (
     align_nav_dates,
     build_common_date_index,
-    compute_missing_data_diagnostics,
     select_nav_policy,
 )
 

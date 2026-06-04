@@ -20,7 +20,7 @@ def sanitize_report(text: str) -> str:
 
 def generate_quality_footer(level: str, reasons: list[str]) -> str:
     """Generate a data quality footer for the report."""
-    lines = [f"\n## 数据质量", f"\n本次回测数据质量等级：**{level}**\n"]
+    lines = ["\n## 数据质量", f"\n本次回测数据质量等级：**{level}**\n"]
     if reasons:
         lines.append("原因：")
         for r in reasons:
@@ -90,8 +90,8 @@ def generate_experiment_report(
             "",
             "## 收益指标",
             "",
-            f"| 指标 | 数值 |",
-            f"|------|------|",
+            "| 指标 | 数值 |",
+            "|------|------|",
             f"| 累计收益 | {metrics.get('cumulative_return', 0):.2%} |",
             f"| 年化收益 | {metrics.get('annualized_return', 0):.2%} |",
             f"| 回测年数 | {metrics.get('years', 0):.1f} 年 |",
@@ -99,8 +99,8 @@ def generate_experiment_report(
             "",
             "## 风险指标",
             "",
-            f"| 指标 | 数值 |",
-            f"|------|------|",
+            "| 指标 | 数值 |",
+            "|------|------|",
             f"| 年化波动率 | {metrics.get('annualized_volatility', 0):.2%} |",
             f"| 最大回撤 | {metrics.get('max_drawdown', 0):.2%} |",
             f"| 夏普比率 | {metrics.get('sharpe_ratio', 0):.2f} |",
@@ -111,8 +111,8 @@ def generate_experiment_report(
             "",
             "## 调仓与成本",
             "",
-            f"| 项目 | 数值 |",
-            f"|------|------|",
+            "| 项目 | 数值 |",
+            "|------|------|",
             f"| 总调仓幅度 | {turnover_total * 2:.2%} |",
             f"| 单边换手率 | {turnover_total:.2%} |",
             f"| 估算交易成本 | {cost_total:.4%} |",
@@ -126,7 +126,7 @@ def generate_experiment_report(
             "## 净值口径",
             "",
             f"- 优先口径：{nav_policy.get('preferred', 'N/A')}",
-            f"- 实际使用：",
+            "- 实际使用：",
         ]
     )
     for code, col in nav_policy.get("actual_used", {}).items():
@@ -155,8 +155,8 @@ def generate_experiment_report(
                 "",
                 "## 基准对比",
                 "",
-                f"| 指标 | 本实验 | 基准 |",
-                f"|------|--------|------|",
+                "| 指标 | 本实验 | 基准 |",
+                "|------|--------|------|",
             ]
         )
         for key, label in [

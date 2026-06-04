@@ -74,6 +74,7 @@ def run_backtest(experiment_id: str, db: Session = Depends(get_db)):
         data_quality_json=json.dumps(result.get("data_quality", [])),
     )
     db.add(bt)
+    db.flush()
 
     # Persist daily NAV
     for day in result["daily"]:

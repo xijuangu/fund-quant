@@ -14,11 +14,13 @@
 
 当前已完成：
 
-- 初始化 Git 仓库。
-- 完成中文产品设计文档。
-- 完成实施计划文档。
-- 搭建 Python-first 项目骨架。
-- 增加最小指标计算测试与实现。
+- Python-first 后端骨架：FastAPI、SQLAlchemy、Alembic、PostgreSQL。
+- 8 张核心表：基金、净值、实验组、组合实验、持仓、压力区间、回测结果、日度回测净值。
+- fund-trace SQLite 导入脚本，当前已导入 24 只基金、35459 条历史净值。
+- 核心回测引擎：净值口径选择、日期对齐、再平衡、回撤、收益风险指标、数据质量评分。
+- Markdown 报告生成和本地 API。
+- React + TypeScript + Vite + Ant Design 本地 Web UI。
+- 已完成一次真实 `75/15/10` smoke 回测并落库。
 
 ## 本地开发
 
@@ -36,10 +38,28 @@ pip install -e ".[dev]"
 docker compose up -d postgres
 ```
 
+执行数据库迁移：
+
+```bash
+.venv/bin/alembic upgrade head
+```
+
+从 fund-trace 导入数据：
+
+```bash
+.venv/bin/python scripts/import_fund_trace.py /Users/xijuangu/Developer/Personal/fund-trace/fund-trace.db
+```
+
+运行默认 `75/15/10` smoke 回测：
+
+```bash
+.venv/bin/python scripts/run_smoke_backtest.py
+```
+
 运行测试：
 
 ```bash
-python3 -m unittest discover
+.venv/bin/python -m pytest -q
 ```
 
 依赖安装完成后可启动 API：
@@ -48,10 +68,17 @@ python3 -m unittest discover
 uvicorn app.main:app --reload
 ```
 
+启动前端：
+
+```bash
+cd web
+npm run dev
+```
+
 ## 文档
 
 - 产品设计：[docs/superpowers/specs/2026-06-04-fund-portfolio-lab-design.md](docs/superpowers/specs/2026-06-04-fund-portfolio-lab-design.md)
 - 实施计划：[docs/superpowers/plans/2026-06-04-fund-portfolio-lab-implementation.md](docs/superpowers/plans/2026-06-04-fund-portfolio-lab-implementation.md)
+- 使用说明：[docs/usage.md](docs/usage.md)
 - 当前进度：[docs/progress.md](docs/progress.md)
 - 后续计划：[docs/roadmap.md](docs/roadmap.md)
-

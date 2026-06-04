@@ -1,5 +1,4 @@
 import unittest
-from datetime import date
 
 import pandas as pd
 
@@ -10,7 +9,6 @@ from app.services.metrics import (
     calculate_annualized_volatility,
     calculate_calmar_ratio,
     calculate_cumulative_return,
-    calculate_max_drawdown,
     calculate_sharpe_ratio,
 )
 

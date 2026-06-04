@@ -1,6 +1,5 @@
 """NAV date alignment and policy selection."""
 
-from datetime import date
 
 import pandas as pd
 

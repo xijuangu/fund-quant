@@ -2,7 +2,6 @@
 
 from datetime import date
 
-import numpy as np
 import pandas as pd
 
 from app.services.contribution import compute_daily_contributions
@@ -110,7 +109,6 @@ def backtest_portfolio(
     dates_list = list(valid_dates)
     for i in range(1, len(dates_list)):
         current_date = dates_list[i]
-        prev_date = dates_list[i - 1]
 
         # Compute daily returns per fund
         fund_returns: dict[str, float] = {}

@@ -96,7 +96,6 @@ def create_experiment(
     note: str = "",
     db: Session = Depends(get_db),
 ):
-    import json
     from datetime import date as date_type
 
     if abs(sum(target_weights.values()) - 1.0) > 0.001:
