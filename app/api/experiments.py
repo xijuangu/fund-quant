@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.models.backtest import BacktestNavDaily, BacktestResult
-from app.models.experiment import PortfolioExperiment, PortfolioPosition
+from app.models.experiment import ExperimentGroup, PortfolioExperiment, PortfolioPosition
 from app.models.fund import FundBasic
 from app.schemas import ExperimentCreate, ExperimentUpdate
 
@@ -23,6 +23,18 @@ def get_db() -> Session:
 @router.get("/health")
 def experiments_health() -> dict[str, str]:
     return {"status": "ok", "module": "experiments"}
+
+
+def validate_fund_codes(db: Session, fund_codes: list[str]) -> dict[str, FundBasic]:
+    funds = db.query(FundBasic).filter(FundBasic.fund_code.in_(fund_codes)).all()
+    fund_map = {fund.fund_code: fund for fund in funds}
+    missing = sorted(set(fund_codes) - set(fund_map))
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Fund not found: {', '.join(missing)}",
+        )
+    return fund_map
 
 
 @router.get("")
@@ -92,10 +104,17 @@ def create_experiment(body: ExperimentCreate, db: Session = Depends(get_db)):
     if abs(sum(body.target_weights.values()) - 1.0) > 0.001:
         raise HTTPException(status_code=400, detail="Target weights must sum to 1.0")
 
+    group_id = uuid.UUID(body.experiment_group_id)
+    group = db.query(ExperimentGroup).filter(ExperimentGroup.experiment_group_id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Experiment group not found")
+
+    fund_map = validate_fund_codes(db, list(body.target_weights.keys()))
+
     e = PortfolioExperiment(
         experiment_id=uuid.uuid4(),
         experiment_name=body.experiment_name,
-        experiment_group_id=uuid.UUID(body.experiment_group_id),
+        experiment_group_id=group_id,
         role=body.role,
         start_date=date_type.fromisoformat(body.start_date) if body.start_date else None,
         end_date=date_type.fromisoformat(body.end_date) if body.end_date else None,
@@ -106,13 +125,12 @@ def create_experiment(body: ExperimentCreate, db: Session = Depends(get_db)):
     db.add(e)
 
     for fund_code, weight in body.target_weights.items():
-        fund = db.query(FundBasic).filter(FundBasic.fund_code == fund_code).first()
-        bucket = fund.asset_bucket if fund else ""
+        fund = fund_map[fund_code]
         pos = PortfolioPosition(
             experiment_id=e.experiment_id,
             fund_code=fund_code,
             target_weight=weight,
-            asset_bucket_snapshot=bucket,
+            asset_bucket_snapshot=fund.asset_bucket,
         )
         db.add(pos)
 
@@ -145,18 +163,19 @@ def update_experiment(experiment_id: str, body: ExperimentUpdate, db: Session = 
         if abs(sum(body.target_weights.values()) - 1.0) > 0.001:
             raise HTTPException(status_code=400, detail="Target weights must sum to 1.0")
 
+        fund_map = validate_fund_codes(db, list(body.target_weights.keys()))
+
         # Delete old positions
         db.query(PortfolioPosition).filter(PortfolioPosition.experiment_id == e.experiment_id).delete()
 
         # Insert new positions
         for fund_code, weight in body.target_weights.items():
-            fund = db.query(FundBasic).filter(FundBasic.fund_code == fund_code).first()
-            bucket = fund.asset_bucket if fund else ""
+            fund = fund_map[fund_code]
             pos = PortfolioPosition(
                 experiment_id=e.experiment_id,
                 fund_code=fund_code,
                 target_weight=weight,
-                asset_bucket_snapshot=bucket,
+                asset_bucket_snapshot=fund.asset_bucket,
             )
             db.add(pos)
 

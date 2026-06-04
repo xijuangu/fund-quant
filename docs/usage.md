@@ -60,7 +60,94 @@ postgresql+psycopg://fund_lab:fund_lab@localhost:5432/fund_lab
 复权净值：fund-trace 暂未提供，当前统一使用累计净值回测
 ```
 
-## 3. 运行 75/15/10 smoke 回测
+## 3. 单独添加新基金与历史数据
+
+第一版推荐把 fund-trace 作为历史净值来源，fund-quant 只负责导入和回测。
+
+### 3.1 在 fund-trace 添加单只基金
+
+```bash
+cd /Users/xijuangu/Developer/Personal/fund-trace
+./fund-trace add 110037
+```
+
+`fund-trace add <code>` 会自动发现基金名称，并写入 fund-trace 的 `funds` / `assets` 表。
+
+### 3.2 拉取这只基金的历史净值
+
+```bash
+./fund-trace history 110037 --days 5000
+```
+
+说明：
+
+- `history` 会优先读取 fund-trace 本地 SQLite。
+- 如果本地没有历史净值，或最新历史净值已过期，会从东方财富历史净值接口拉取并写入 `nav_snapshots`。
+- `--days 5000` 表示最多拉取约 5000 条历史净值记录。
+
+如果刚添加了一批基金，也可以批量回填所有已跟踪基金：
+
+```bash
+./fund-trace backfill --days 5000 --sleep-ms 500
+```
+
+### 3.3 重新导入 fund-quant
+
+回到 fund-quant 项目：
+
+```bash
+cd /Users/xijuangu/Developer/Personal/fund-quant
+.venv/bin/python scripts/import_fund_trace.py /Users/xijuangu/Developer/Personal/fund-trace/fund-trace.db
+```
+
+导入脚本使用 `merge` 语义，可以重复执行：
+
+- 已存在的 `fund_basic` 会更新。
+- 已存在的 `fund_nav_daily` 同基金同日期记录会更新。
+- 新基金和新净值会追加。
+
+导入后检查：
+
+```bash
+.venv/bin/python - <<'PY'
+from app.db.session import SessionLocal
+from app.models.fund import FundBasic, FundNavDaily
+
+code = "110037"
+db = SessionLocal()
+fund = db.query(FundBasic).filter(FundBasic.fund_code == code).first()
+count = db.query(FundNavDaily).filter(FundNavDaily.fund_code == code).count()
+first = db.query(FundNavDaily.nav_date).filter(FundNavDaily.fund_code == code).order_by(FundNavDaily.nav_date.asc()).first()
+last = db.query(FundNavDaily.nav_date).filter(FundNavDaily.fund_code == code).order_by(FundNavDaily.nav_date.desc()).first()
+print(fund.fund_code, fund.fund_name, fund.asset_bucket)
+print("nav rows:", count, "range:", first[0] if first else None, "to", last[0] if last else None)
+db.close()
+PY
+```
+
+### 3.4 在 fund-quant 中调整资产桶
+
+fund-trace 导入时会根据基金名称轻量推断资产桶。如果不准确，可以在基金池页面编辑，或直接调用 API 修改：
+
+```bash
+curl -X PUT http://localhost:8000/funds/110037 \
+  -H 'Content-Type: application/json' \
+  -d '{"asset_bucket":"bond"}'
+```
+
+当前支持的资产桶：
+
+```text
+a_share_equity    A股权益
+overseas_qdii     海外/QDII权益
+bond              债券
+gold_commodity    黄金/商品
+money_market      货币/现金替代
+```
+
+注意：基金池页面的“添加基金”只创建 `fund_basic`，不会自动拉取历史净值。没有足够历史净值的基金无法参与正式回测。
+
+## 4. 运行 75/15/10 smoke 回测
 
 默认 smoke 组合：
 
@@ -105,7 +192,7 @@ postgresql+psycopg://fund_lab:fund_lab@localhost:5432/fund_lab
 - 基金必须已经存在于 `fund_basic`。
 - 回测区间内必须有足够的共同有效净值。
 
-## 4. 本次 smoke 回测结果
+## 5. 本次 smoke 回测结果
 
 2026-06-04 已完成一次真实落库回测：
 
@@ -132,7 +219,7 @@ postgresql+psycopg://fund_lab:fund_lab@localhost:5432/fund_lab
 
 这些结果只代表当前基金池和当前净值口径下的历史回测，不构成投资建议。
 
-## 5. 运行服务
+## 6. 运行服务
 
 启动 API：
 
@@ -147,7 +234,7 @@ cd web
 npm run dev
 ```
 
-## 6. 测试
+## 7. 测试
 
 后端测试：
 

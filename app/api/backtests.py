@@ -53,13 +53,17 @@ def run_backtest(experiment_id: str, db: Session = Depends(get_db)):
     if not nav_data:
         raise HTTPException(status_code=400, detail="No NAV data available for experiment funds")
 
-    result = backtest_portfolio(
-        nav_data,
-        target_weights,
-        rebalance_rule=exp.rebalance_rule,
-        start_date=exp.start_date,
-        end_date=exp.end_date,
-    )
+    try:
+        result = backtest_portfolio(
+            nav_data,
+            target_weights,
+            rebalance_rule=exp.rebalance_rule,
+            start_date=exp.start_date,
+            end_date=exp.end_date,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # Persist backtest result
     bt = BacktestResult(

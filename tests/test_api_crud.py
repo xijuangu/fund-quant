@@ -3,14 +3,13 @@
 Uses in-memory SQLite — no PostgreSQL needed.
 """
 
-import json
 import os
 import uuid
 from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -124,6 +123,22 @@ class TestFunds:
 
         r = client.get("/funds/000005")
         assert r.status_code == 404
+
+    def test_delete_referenced_fund_rejected(self):
+        gid = client.post("/experiment-groups", json={"group_name": "引用测试"}).json()["experiment_group_id"]
+        client.post("/funds", json={"fund_code": "REF001", "fund_name": "被引用基金"})
+        client.post("/experiments", json={
+            "experiment_name": "引用基金实验",
+            "experiment_group_id": gid,
+            "target_weights": {"REF001": 1.0},
+        })
+
+        r = client.delete("/funds/REF001")
+        assert r.status_code == 409
+        assert "referenced" in r.json()["detail"]
+
+        r = client.get("/funds/REF001")
+        assert r.status_code == 200
 
     def test_delete_not_found(self):
         r = client.delete("/funds/999999")
@@ -254,6 +269,24 @@ class TestExperiments:
         })
         assert r.status_code == 400
 
+    def test_create_rejects_missing_group(self):
+        self._create_fund("F001")
+        r = client.post("/experiments", json={
+            "experiment_name": "E1",
+            "experiment_group_id": str(uuid.uuid4()),
+            "target_weights": {"F001": 1.0},
+        })
+        assert r.status_code == 404
+
+    def test_create_rejects_missing_fund(self):
+        gid = self._create_group()
+        r = client.post("/experiments", json={
+            "experiment_name": "E1",
+            "experiment_group_id": gid,
+            "target_weights": {"MISS01": 1.0},
+        })
+        assert r.status_code == 400
+
     def test_get_single_includes_positions(self):
         gid = self._create_group()
         self._create_fund("F001", bucket="bond")
@@ -291,7 +324,9 @@ class TestExperiments:
 
     def test_update_positions(self):
         gid = self._create_group()
-        self._create_fund("F001"); self._create_fund("F002"); self._create_fund("F003")
+        self._create_fund("F001")
+        self._create_fund("F002")
+        self._create_fund("F003")
         eid = self._create_exp(gid, "E4", weights={"F001": 0.5, "F002": 0.5})
 
         r = client.put(f"/experiments/{eid}", json={
@@ -308,6 +343,14 @@ class TestExperiments:
         eid = self._create_exp(gid, "E5", weights={"F001": 1.0})
 
         r = client.put(f"/experiments/{eid}", json={"target_weights": {"F001": 0.5}})
+        assert r.status_code == 400
+
+    def test_update_positions_rejects_missing_fund(self):
+        gid = self._create_group()
+        self._create_fund("F001")
+        eid = self._create_exp(gid, "E5", weights={"F001": 1.0})
+
+        r = client.put(f"/experiments/{eid}", json={"target_weights": {"MISS01": 1.0}})
         assert r.status_code == 400
 
     def test_update_not_found(self):
@@ -395,7 +438,7 @@ class TestStressPeriods:
         assert r.status_code == 404
 
     def test_list_filter_active(self):
-        pid1 = self._create("active-one")
+        self._create("active-one")
         pid2 = self._create("inactive-one")
         client.put(f"/stress-periods/{pid2}", json={"is_active": False})
 
@@ -486,8 +529,9 @@ class TestBacktestResults:
             {"fund_code": "F001", "nav_date": "2024-01-02", "unit_nav": 1.0, "accumulated_nav": 2.0, "adjusted_nav": 2.0, "source": "test"},
         ])
 
-        with pytest.raises(ValueError):
-            client.post(f"/backtests/run/{eid}", json={})
+        r = client.post(f"/backtests/run/{eid}", json={})
+        assert r.status_code == 400
+        assert "Not enough" in r.json()["detail"]
 
     def test_delete_backtest_result(self):
         gid = self._create_group()

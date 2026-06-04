@@ -2,8 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
-from app.models.backtest import BacktestNavDaily, BacktestResult
-from app.models.experiment import PortfolioExperiment, PortfolioPosition
+from app.models.experiment import PortfolioPosition
 from app.models.fund import FundBasic, FundNavDaily
 from app.schemas import FundCreate, FundUpdate
 
@@ -118,22 +117,12 @@ def delete_fund(fund_code: str, db: Session = Depends(get_db)):
     if not f:
         raise HTTPException(status_code=404, detail="Fund not found")
 
-    # Cascade: for each experiment that references this fund, delete backtests → positions → experiment
-    positions = db.query(PortfolioPosition).filter(PortfolioPosition.fund_code == fund_code).all()
-    seen_exp_ids = set()
-    for pos in positions:
-        eid = pos.experiment_id
-        if eid in seen_exp_ids:
-            continue
-        seen_exp_ids.add(eid)
-        exp = db.query(PortfolioExperiment).filter(PortfolioExperiment.experiment_id == eid).first()
-        if exp:
-            backtests = db.query(BacktestResult).filter(BacktestResult.experiment_id == eid).all()
-            for bt in backtests:
-                db.query(BacktestNavDaily).filter(BacktestNavDaily.result_id == bt.result_id).delete()
-                db.delete(bt)
-            db.query(PortfolioPosition).filter(PortfolioPosition.experiment_id == eid).delete()
-            db.delete(exp)
+    referenced = db.query(PortfolioPosition).filter(PortfolioPosition.fund_code == fund_code).first()
+    if referenced:
+        raise HTTPException(
+            status_code=409,
+            detail="Fund is referenced by one or more experiments; disable it or remove those experiments first.",
+        )
 
     db.query(FundNavDaily).filter(FundNavDaily.fund_code == fund_code).delete()
     db.delete(f)

@@ -55,7 +55,11 @@ export default function FundPoolPage() {
       form.resetFields();
       setEditingFund(null);
       fetchFunds();
-    } catch { /* validation / API */ }
+    } catch (error) {
+      if (error instanceof Error) {
+        message.error(error.message);
+      }
+    }
   };
 
   const handleDelete = async (fundCode: string) => {
@@ -63,8 +67,8 @@ export default function FundPoolPage() {
       await api.del(`/funds/${fundCode}`);
       message.success('基金已删除');
       fetchFunds();
-    } catch {
-      message.error('删除失败');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '删除失败');
     }
   };
 
@@ -99,7 +103,7 @@ export default function FundPoolPage() {
     { title: '成立日期', dataIndex: 'inception_date', key: 'inception_date', width: 110, responsive: ['lg'], sorter: (a, b) => (a.inception_date || '').localeCompare(b.inception_date || ''), render: (v: string | null) => v || '-' },
     { title: '状态', dataIndex: 'is_active', key: 'is_active', width: 70, render: (v: boolean, r) => <Switch size="small" checked={v} onChange={() => handleToggleActive(r)} /> },
     { title: '备注', dataIndex: 'note', key: 'note', width: 140, ellipsis: true, responsive: ['lg'], render: (v: string) => v ? <Text type="secondary">{v}</Text> : '-' },
-    { title: '操作', key: 'actions', width: 120, render: (_, r) => (<Space size={0}><Tooltip title="编辑"><Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} /></Tooltip><Popconfirm title="确认删除？" onConfirm={() => handleDelete(r.fund_code)} okText="删除" cancelText="取消"><Button type="link" danger size="small" icon={<DeleteOutlined />} /></Popconfirm></Space>) },
+    { title: '操作', key: 'actions', width: 120, render: (_, r) => (<Space size={0}><Tooltip title="编辑"><Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} /></Tooltip><Popconfirm title="确认删除基金？" description="仅未被实验引用的基金可删除；已引用基金请先停用或删除相关实验。" onConfirm={() => handleDelete(r.fund_code)} okText="删除" cancelText="取消"><Button type="link" danger size="small" icon={<DeleteOutlined />} /></Popconfirm></Space>) },
   ];
 
   return (
