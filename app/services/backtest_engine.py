@@ -56,6 +56,8 @@ def backtest_portfolio(
     for code in target_weights:
         if code not in fund_navs:
             raise ValueError(f"Fund {code} is in target weights but has no NAV data")
+        if fund_navs[code].empty:
+            raise ValueError(f"Fund {code} has no NAV data for selected backtest range")
 
     # Filter date range
     if start_date is not None or end_date is not None:
@@ -66,6 +68,8 @@ def backtest_portfolio(
                 m = m[m.index >= pd.Timestamp(start_date)]
             if end_date is not None:
                 m = m[m.index <= pd.Timestamp(end_date)]
+            if m.empty:
+                raise ValueError(f"Fund {code} has no NAV data for selected backtest range")
             filtered[code] = m
         fund_navs = filtered
 

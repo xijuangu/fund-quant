@@ -459,15 +459,28 @@ class TestBacktestResults:
     def _create_fund(self, code, name, bucket="a_share_equity"):
         client.post("/funds", json={"fund_code": code, "fund_name": name, "asset_bucket": bucket})
 
-    def _create_exp(self, group_id, name="测试实验", weights=None, rebalance="no_rebalance"):
+    def _create_exp(
+        self,
+        group_id,
+        name="测试实验",
+        weights=None,
+        rebalance="no_rebalance",
+        start_date=None,
+        end_date=None,
+    ):
         if weights is None:
             weights = {"F001": 1.0}
-        r = client.post("/experiments", json={
+        payload = {
             "experiment_name": name,
             "experiment_group_id": group_id,
             "target_weights": weights,
             "rebalance_rule": rebalance,
-        })
+        }
+        if start_date is not None:
+            payload["start_date"] = start_date.isoformat()
+        if end_date is not None:
+            payload["end_date"] = end_date.isoformat()
+        r = client.post("/experiments", json=payload)
         return r.json()["experiment_id"]
 
     def _seed_nav(self, code, data):
@@ -532,6 +545,32 @@ class TestBacktestResults:
         r = client.post(f"/backtests/run/{eid}", json={})
         assert r.status_code == 400
         assert "Not enough" in r.json()["detail"]
+
+    def test_run_backtest_fund_without_nav_in_selected_range_returns_400(self):
+        gid = self._create_group()
+        self._create_fund("F001", "基金A")
+        self._create_fund("F002", "区间外基金")
+        eid = self._create_exp(
+            gid,
+            "E2 range gap",
+            weights={"F001": 0.5, "F002": 0.5},
+            start_date=date(2024, 1, 2),
+            end_date=date(2024, 1, 5),
+        )
+
+        self._seed_nav("F001", [
+            {"fund_code": "F001", "nav_date": "2024-01-02", "unit_nav": 1.0, "accumulated_nav": 2.0, "adjusted_nav": 2.0, "source": "test"},
+            {"fund_code": "F001", "nav_date": "2024-01-03", "unit_nav": 1.01, "accumulated_nav": 2.02, "adjusted_nav": 2.02, "source": "test"},
+        ])
+        self._seed_nav("F002", [
+            {"fund_code": "F002", "nav_date": "2025-01-02", "unit_nav": 1.0, "accumulated_nav": 2.0, "adjusted_nav": 2.0, "source": "test"},
+            {"fund_code": "F002", "nav_date": "2025-01-03", "unit_nav": 1.01, "accumulated_nav": 2.02, "adjusted_nav": 2.02, "source": "test"},
+        ])
+
+        r = client.post(f"/backtests/run/{eid}", json={})
+        assert r.status_code == 400
+        assert "F002" in r.json()["detail"]
+        assert "no NAV data" in r.json()["detail"]
 
     def test_delete_backtest_result(self):
         gid = self._create_group()

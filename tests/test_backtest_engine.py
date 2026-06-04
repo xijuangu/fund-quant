@@ -1,4 +1,5 @@
 import unittest
+from datetime import date
 
 import pandas as pd
 
@@ -69,6 +70,20 @@ class BacktestEngineTest(unittest.TestCase):
                 {"equity": 0.5, "bond": 0.3},
                 rebalance_rule="no_rebalance",
                 nav_column="adjusted_nav",
+            )
+
+    def test_backtest_rejects_empty_nav_after_date_filter(self):
+        with self.assertRaisesRegex(ValueError, "has no NAV data"):
+            backtest_portfolio(
+                {
+                    "equity": self.fund_navs["equity"],
+                    "late_fund": pd.DataFrame(),
+                },
+                {"equity": 0.5, "late_fund": 0.5},
+                rebalance_rule="monthly",
+                nav_column="adjusted_nav",
+                start_date=date(2024, 1, 2),
+                end_date=date(2024, 1, 8),
             )
 
 
