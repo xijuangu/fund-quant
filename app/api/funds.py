@@ -118,16 +118,21 @@ def delete_fund(fund_code: str, db: Session = Depends(get_db)):
     if not f:
         raise HTTPException(status_code=404, detail="Fund not found")
 
-    # Cascade: find experiments referencing this fund, delete backtests → positions → experiment
+    # Cascade: for each experiment that references this fund, delete backtests → positions → experiment
     positions = db.query(PortfolioPosition).filter(PortfolioPosition.fund_code == fund_code).all()
+    seen_exp_ids = set()
     for pos in positions:
-        exp = db.query(PortfolioExperiment).filter(PortfolioExperiment.experiment_id == pos.experiment_id).first()
+        eid = pos.experiment_id
+        if eid in seen_exp_ids:
+            continue
+        seen_exp_ids.add(eid)
+        exp = db.query(PortfolioExperiment).filter(PortfolioExperiment.experiment_id == eid).first()
         if exp:
-            backtests = db.query(BacktestResult).filter(BacktestResult.experiment_id == exp.experiment_id).all()
+            backtests = db.query(BacktestResult).filter(BacktestResult.experiment_id == eid).all()
             for bt in backtests:
                 db.query(BacktestNavDaily).filter(BacktestNavDaily.result_id == bt.result_id).delete()
                 db.delete(bt)
-            db.query(PortfolioPosition).filter(PortfolioPosition.experiment_id == exp.experiment_id).delete()
+            db.query(PortfolioPosition).filter(PortfolioPosition.experiment_id == eid).delete()
             db.delete(exp)
 
     db.query(FundNavDaily).filter(FundNavDaily.fund_code == fund_code).delete()
