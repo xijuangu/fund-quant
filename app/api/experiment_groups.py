@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.models.experiment import ExperimentGroup
+from app.schemas import ExperimentGroupCreate, ExperimentGroupUpdate
 
 router = APIRouter(prefix="/experiment-groups", tags=["experiment-groups"])
 
@@ -50,18 +51,37 @@ def get_experiment_group(group_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("", status_code=201)
-def create_experiment_group(
-    group_name: str,
-    research_question: str = "",
-    note: str = "",
-    db: Session = Depends(get_db),
-):
+def create_experiment_group(body: ExperimentGroupCreate, db: Session = Depends(get_db)):
     g = ExperimentGroup(
         experiment_group_id=uuid.uuid4(),
-        group_name=group_name,
-        research_question=research_question,
-        note=note,
+        group_name=body.group_name,
+        research_question=body.research_question,
+        note=body.note,
     )
     db.add(g)
     db.commit()
     return {"experiment_group_id": str(g.experiment_group_id), "status": "created"}
+
+
+@router.put("/{group_id}")
+def update_experiment_group(group_id: str, body: ExperimentGroupUpdate, db: Session = Depends(get_db)):
+    g = db.query(ExperimentGroup).filter(ExperimentGroup.experiment_group_id == uuid.UUID(group_id)).first()
+    if not g:
+        raise HTTPException(status_code=404, detail="Experiment group not found")
+
+    updates = body.model_dump(exclude_unset=True)
+    for key, val in updates.items():
+        setattr(g, key, val)
+
+    db.commit()
+    return {"experiment_group_id": group_id, "status": "updated"}
+
+
+@router.delete("/{group_id}")
+def delete_experiment_group(group_id: str, db: Session = Depends(get_db)):
+    g = db.query(ExperimentGroup).filter(ExperimentGroup.experiment_group_id == uuid.UUID(group_id)).first()
+    if not g:
+        raise HTTPException(status_code=404, detail="Experiment group not found")
+    db.delete(g)
+    db.commit()
+    return {"experiment_group_id": group_id, "status": "deleted"}

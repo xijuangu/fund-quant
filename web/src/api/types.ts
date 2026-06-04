@@ -80,3 +80,37 @@ export interface StressPeriod {
   description: string;
   is_active: boolean;
 }
+
+// ── Asset bucket mapping (English DB keys → Chinese labels) ──
+
+export const BUCKET_KEYS = [
+  'a_share_equity',
+  'overseas_qdii',
+  'bond',
+  'gold_commodity',
+  'money_market',
+] as const;
+
+export const BUCKET_LABELS: Record<string, string> = {
+  a_share_equity: 'A股权益',
+  overseas_qdii: '海外/QDII权益',
+  bond: '债券',
+  gold_commodity: '黄金/商品',
+  money_market: '货币/现金替代',
+};
+
+export const BUCKET_COLORS: Record<string, string> = {
+  a_share_equity: '#1677ff',
+  overseas_qdii: '#13c2c2',
+  bond: '#52c41a',
+  gold_commodity: '#fa8c16',
+  money_market: '#8c8c8c',
+};
+
+export const BUCKET_ORDER: Record<string, number> = {
+  a_share_equity: 0,
+  overseas_qdii: 1,
+  bond: 2,
+  gold_commodity: 3,
+  money_market: 4,
+};

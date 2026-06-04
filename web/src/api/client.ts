@@ -17,6 +17,12 @@ export const api = {
 
   post: <T = unknown>(path: string, body: Record<string, unknown>) =>
     request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
+
+  put: <T = unknown>(path: string, body: Record<string, unknown>) =>
+    request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
+
+  del: <T = unknown>(path: string) =>
+    request<T>(path, { method: 'DELETE' }),
 };
 
 export default api;

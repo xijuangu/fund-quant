@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.models.fund import FundBasic
+from app.schemas import FundCreate, FundUpdate
 
 router = APIRouter(prefix="/funds", tags=["funds"])
 
@@ -65,35 +66,55 @@ def get_fund(fund_code: str, db: Session = Depends(get_db)):
 
 
 @router.post("", status_code=201)
-def create_fund(
-    fund_code: str,
-    fund_name: str,
-    fund_type: str = "",
-    asset_bucket: str = "",
-    inception_date: str | None = None,
-    fund_company: str = "",
-    note: str = "",
-    db: Session = Depends(get_db),
-):
+def create_fund(body: FundCreate, db: Session = Depends(get_db)):
     from datetime import date as date_type
 
-    existing = db.query(FundBasic).filter(FundBasic.fund_code == fund_code).first()
+    existing = db.query(FundBasic).filter(FundBasic.fund_code == body.fund_code).first()
     if existing:
         raise HTTPException(status_code=409, detail="Fund already exists")
 
     inc_date = None
-    if inception_date:
-        inc_date = date_type.fromisoformat(inception_date)
+    if body.inception_date:
+        inc_date = date_type.fromisoformat(body.inception_date)
 
     f = FundBasic(
-        fund_code=fund_code,
-        fund_name=fund_name,
-        fund_type=fund_type,
-        asset_bucket=asset_bucket,
+        fund_code=body.fund_code,
+        fund_name=body.fund_name,
+        fund_type=body.fund_type,
+        asset_bucket=body.asset_bucket,
         inception_date=inc_date,
-        fund_company=fund_company,
-        note=note,
+        fund_company=body.fund_company,
+        note=body.note,
     )
     db.add(f)
     db.commit()
-    return {"fund_code": fund_code, "status": "created"}
+    return {"fund_code": body.fund_code, "status": "created"}
+
+
+@router.put("/{fund_code}")
+def update_fund(fund_code: str, body: FundUpdate, db: Session = Depends(get_db)):
+    from datetime import date as date_type
+
+    f = db.query(FundBasic).filter(FundBasic.fund_code == fund_code).first()
+    if not f:
+        raise HTTPException(status_code=404, detail="Fund not found")
+
+    updates = body.model_dump(exclude_unset=True)
+    if "inception_date" in updates:
+        updates["inception_date"] = date_type.fromisoformat(updates["inception_date"]) if updates["inception_date"] else None
+
+    for key, val in updates.items():
+        setattr(f, key, val)
+
+    db.commit()
+    return {"fund_code": fund_code, "status": "updated"}
+
+
+@router.delete("/{fund_code}")
+def delete_fund(fund_code: str, db: Session = Depends(get_db)):
+    f = db.query(FundBasic).filter(FundBasic.fund_code == fund_code).first()
+    if not f:
+        raise HTTPException(status_code=404, detail="Fund not found")
+    db.delete(f)
+    db.commit()
+    return {"fund_code": fund_code, "status": "deleted"}

@@ -4,8 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
+from app.models.backtest import BacktestNavDaily, BacktestResult
 from app.models.experiment import PortfolioExperiment, PortfolioPosition
 from app.models.fund import FundBasic
+from app.schemas import ExperimentCreate, ExperimentUpdate
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
 
@@ -84,37 +86,26 @@ def get_experiment(experiment_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("", status_code=201)
-def create_experiment(
-    experiment_name: str,
-    experiment_group_id: str,
-    target_weights: dict[str, float],
-    role: str = "main",
-    start_date: str | None = None,
-    end_date: str | None = None,
-    rebalance_rule: str = "no_rebalance",
-    cost_model: str = "{}",
-    note: str = "",
-    db: Session = Depends(get_db),
-):
+def create_experiment(body: ExperimentCreate, db: Session = Depends(get_db)):
     from datetime import date as date_type
 
-    if abs(sum(target_weights.values()) - 1.0) > 0.001:
+    if abs(sum(body.target_weights.values()) - 1.0) > 0.001:
         raise HTTPException(status_code=400, detail="Target weights must sum to 1.0")
 
     e = PortfolioExperiment(
         experiment_id=uuid.uuid4(),
-        experiment_name=experiment_name,
-        experiment_group_id=uuid.UUID(experiment_group_id),
-        role=role,
-        start_date=date_type.fromisoformat(start_date) if start_date else None,
-        end_date=date_type.fromisoformat(end_date) if end_date else None,
-        rebalance_rule=rebalance_rule,
-        cost_model=cost_model,
-        note=note,
+        experiment_name=body.experiment_name,
+        experiment_group_id=uuid.UUID(body.experiment_group_id),
+        role=body.role,
+        start_date=date_type.fromisoformat(body.start_date) if body.start_date else None,
+        end_date=date_type.fromisoformat(body.end_date) if body.end_date else None,
+        rebalance_rule=body.rebalance_rule,
+        cost_model=body.cost_model,
+        note=body.note,
     )
     db.add(e)
 
-    for fund_code, weight in target_weights.items():
+    for fund_code, weight in body.target_weights.items():
         fund = db.query(FundBasic).filter(FundBasic.fund_code == fund_code).first()
         bucket = fund.asset_bucket if fund else ""
         pos = PortfolioPosition(
@@ -127,3 +118,69 @@ def create_experiment(
 
     db.commit()
     return {"experiment_id": str(e.experiment_id), "status": "created"}
+
+
+@router.put("/{experiment_id}")
+def update_experiment(experiment_id: str, body: ExperimentUpdate, db: Session = Depends(get_db)):
+    from datetime import date as date_type
+
+    e = db.query(PortfolioExperiment).filter(
+        PortfolioExperiment.experiment_id == uuid.UUID(experiment_id)
+    ).first()
+    if not e:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+
+    # Update scalar fields
+    scalar_updates = body.model_dump(exclude_unset=True, exclude={"target_weights"})
+    if "start_date" in scalar_updates:
+        scalar_updates["start_date"] = date_type.fromisoformat(scalar_updates["start_date"]) if scalar_updates["start_date"] else None
+    if "end_date" in scalar_updates:
+        scalar_updates["end_date"] = date_type.fromisoformat(scalar_updates["end_date"]) if scalar_updates["end_date"] else None
+
+    for key, val in scalar_updates.items():
+        setattr(e, key, val)
+
+    # Update positions if provided
+    if body.target_weights is not None:
+        if abs(sum(body.target_weights.values()) - 1.0) > 0.001:
+            raise HTTPException(status_code=400, detail="Target weights must sum to 1.0")
+
+        # Delete old positions
+        db.query(PortfolioPosition).filter(PortfolioPosition.experiment_id == e.experiment_id).delete()
+
+        # Insert new positions
+        for fund_code, weight in body.target_weights.items():
+            fund = db.query(FundBasic).filter(FundBasic.fund_code == fund_code).first()
+            bucket = fund.asset_bucket if fund else ""
+            pos = PortfolioPosition(
+                experiment_id=e.experiment_id,
+                fund_code=fund_code,
+                target_weight=weight,
+                asset_bucket_snapshot=bucket,
+            )
+            db.add(pos)
+
+    db.commit()
+    return {"experiment_id": experiment_id, "status": "updated"}
+
+
+@router.delete("/{experiment_id}")
+def delete_experiment(experiment_id: str, db: Session = Depends(get_db)):
+    e = db.query(PortfolioExperiment).filter(
+        PortfolioExperiment.experiment_id == uuid.UUID(experiment_id)
+    ).first()
+    if not e:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+
+    # Delete backtest results and daily NAVs first
+    backtests = db.query(BacktestResult).filter(BacktestResult.experiment_id == e.experiment_id).all()
+    for bt in backtests:
+        db.query(BacktestNavDaily).filter(BacktestNavDaily.result_id == bt.result_id).delete()
+        db.delete(bt)
+
+    # Delete positions
+    db.query(PortfolioPosition).filter(PortfolioPosition.experiment_id == e.experiment_id).delete()
+
+    db.delete(e)
+    db.commit()
+    return {"experiment_id": experiment_id, "status": "deleted"}

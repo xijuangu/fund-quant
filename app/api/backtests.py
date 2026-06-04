@@ -131,6 +131,40 @@ def get_backtest_result(result_id: str, db: Session = Depends(get_db)):
     }
 
 
+@router.get("/results/by-experiment/{experiment_id}")
+def get_backtest_result_by_experiment(experiment_id: str, db: Session = Depends(get_db)):
+    """Get the latest backtest result for a given experiment."""
+    bt = (
+        db.query(BacktestResult)
+        .filter(BacktestResult.experiment_id == uuid_mod.UUID(experiment_id))
+        .order_by(BacktestResult.run_time.desc())
+        .first()
+    )
+    if not bt:
+        raise HTTPException(status_code=404, detail="No backtest result found for this experiment")
+
+    daily = (
+        db.query(BacktestNavDaily)
+        .filter(BacktestNavDaily.result_id == bt.result_id)
+        .order_by(BacktestNavDaily.nav_date)
+        .all()
+    )
+
+    return {
+        "result_id": str(bt.result_id),
+        "experiment_id": str(bt.experiment_id),
+        "metrics": json.loads(bt.metrics_json),
+        "nav_policy": json.loads(bt.nav_policy_json),
+        "data_quality_level": bt.data_quality_level,
+        "data_quality": json.loads(bt.data_quality_json),
+        "daily_nav": [
+            {"nav_date": d.nav_date.isoformat(), "portfolio_nav": d.portfolio_nav, "portfolio_return": d.portfolio_return, "drawdown": d.drawdown}
+            for d in daily
+        ],
+        "report_markdown": bt.report_markdown,
+    }
+
+
 @router.get("/results/{result_id}/report")
 def get_backtest_report(result_id: str, db: Session = Depends(get_db)):
     bt = (
@@ -156,11 +190,30 @@ def get_backtest_report(result_id: str, db: Session = Depends(get_db)):
         .all()
     ) if exp else []
 
-    metrics = json.loads(bt.metrics_json)
-    nav_policy = json.loads(bt.nav_policy_json)
-    missing_diag = json.loads(bt.missing_data_json)
-    quality_reasons = json.loads(bt.data_quality_json)
-    contributions = json.loads(bt.contribution_json)
+    try:
+        metrics = json.loads(bt.metrics_json or "{}")
+    except (json.JSONDecodeError, TypeError):
+        metrics = {}
+    try:
+        nav_policy = json.loads(bt.nav_policy_json or "{}")
+    except (json.JSONDecodeError, TypeError):
+        nav_policy = {}
+    try:
+        missing_diag = json.loads(bt.missing_data_json or "{}")
+    except (json.JSONDecodeError, TypeError):
+        missing_diag = {}
+    try:
+        quality_reasons = json.loads(bt.data_quality_json or "[]")
+    except (json.JSONDecodeError, TypeError):
+        quality_reasons = []
+    try:
+        contributions = json.loads(bt.contribution_json or "[]")
+    except (json.JSONDecodeError, TypeError):
+        contributions = []
+    try:
+        rebalance_records = json.loads(bt.rebalance_records_json or "[]")
+    except (json.JSONDecodeError, TypeError):
+        rebalance_records = []
 
     # Aggregate contributions
     contrib_summary: dict[str, float] = {}
@@ -170,7 +223,6 @@ def get_backtest_report(result_id: str, db: Session = Depends(get_db)):
                 contrib_summary[code] = contrib_summary.get(code, 0.0) + val
 
     # Compute turnover from rebalance records
-    rebalance_records = json.loads(bt.rebalance_records_json)
     turnover_total = sum(r.get("turnover", 0.0) for r in rebalance_records) if isinstance(rebalance_records, list) else 0.0
     cost_total = sum(r.get("estimated_cost", 0.0) for r in rebalance_records) if isinstance(rebalance_records, list) else 0.0
 
@@ -182,7 +234,7 @@ def get_backtest_report(result_id: str, db: Session = Depends(get_db)):
         end_date=exp.end_date.isoformat() if exp and exp.end_date else "N/A",
         metrics=metrics,
         nav_policy=nav_policy,
-        data_quality_level=bt.data_quality_level,
+        data_quality_level=bt.data_quality_level or "B",
         data_quality_reasons=quality_reasons,
         missing_data_diag=missing_diag,
         contributions_summary=contrib_summary,
@@ -194,3 +246,19 @@ def get_backtest_report(result_id: str, db: Session = Depends(get_db)):
     db.commit()
 
     return {"report": report}
+
+
+@router.delete("/results/{result_id}")
+def delete_backtest_result(result_id: str, db: Session = Depends(get_db)):
+    bt = (
+        db.query(BacktestResult)
+        .filter(BacktestResult.result_id == uuid_mod.UUID(result_id))
+        .first()
+    )
+    if not bt:
+        raise HTTPException(status_code=404, detail="Backtest result not found")
+
+    db.query(BacktestNavDaily).filter(BacktestNavDaily.result_id == bt.result_id).delete()
+    db.delete(bt)
+    db.commit()
+    return {"result_id": result_id, "status": "deleted"}
